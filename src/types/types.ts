@@ -68,6 +68,7 @@ export interface ReaderSettings {
 	autoScroll: boolean;
 	highlightActiveLine: boolean;
 	customCss: string;
+	autoActivateRules: string[];
 }
 
 export interface Settings {

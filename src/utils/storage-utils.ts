@@ -37,7 +37,8 @@ export let generalSettings: Settings = {
 		pinPlayer: true,
 		autoScroll: true,
 		highlightActiveLine: true,
-		customCss: ''
+		customCss: '',
+		autoActivateRules: []
 	},
 	stats: {
 		addToObsidian: 0,
@@ -89,6 +90,7 @@ interface StorageData {
 		autoScroll?: boolean;
 		highlightActiveLine?: boolean;
 		customCss?: string;
+		autoActivateRules?: string[];
 	};
 	interpreter_settings?: {
 		interpreterModel?: string;
@@ -149,7 +151,8 @@ export async function loadSettings(): Promise<Settings> {
 			pinPlayer: true,
 			autoScroll: true,
 			highlightActiveLine: true,
-			customCss: ''
+			customCss: '',
+			autoActivateRules: []
 		},
 		stats: {
 			addToObsidian: 0,
@@ -211,7 +214,10 @@ export async function loadSettings(): Promise<Settings> {
 			pinPlayer: data.reader_settings?.pinPlayer ?? defaultSettings.readerSettings.pinPlayer,
 			autoScroll: data.reader_settings?.autoScroll ?? defaultSettings.readerSettings.autoScroll,
 			highlightActiveLine: data.reader_settings?.highlightActiveLine ?? defaultSettings.readerSettings.highlightActiveLine,
-			customCss: data.reader_settings?.customCss ?? defaultSettings.readerSettings.customCss
+			customCss: data.reader_settings?.customCss ?? defaultSettings.readerSettings.customCss,
+			autoActivateRules: Array.isArray(data.reader_settings?.autoActivateRules)
+				? data.reader_settings!.autoActivateRules.filter((r: unknown): r is string => typeof r === 'string')
+				: defaultSettings.readerSettings.autoActivateRules
 		},
 		stats: data.stats || defaultSettings.stats,
 		history: data.history || defaultSettings.history,
@@ -268,7 +274,8 @@ export async function saveSettings(settings?: Partial<Settings>): Promise<void> 
 			pinPlayer: generalSettings.readerSettings.pinPlayer,
 			autoScroll: generalSettings.readerSettings.autoScroll,
 			highlightActiveLine: generalSettings.readerSettings.highlightActiveLine,
-			customCss: generalSettings.readerSettings.customCss
+			customCss: generalSettings.readerSettings.customCss,
+			autoActivateRules: generalSettings.readerSettings.autoActivateRules
 		},
 		stats: generalSettings.stats
 	});

@@ -413,6 +413,18 @@ export async function initializeReaderSettings() {
 		}, 500));
 	}
 
+	const autoActivateInput = document.getElementById('reader-auto-activate-rules') as HTMLTextAreaElement;
+	if (autoActivateInput) {
+		autoActivateInput.value = (generalSettings.readerSettings.autoActivateRules ?? []).join('\n');
+		autoActivateInput.addEventListener('input', debounce(() => {
+			const rules = autoActivateInput.value
+				.split('\n')
+				.map(line => line.trim())
+				.filter(line => line.length > 0);
+			saveSettings({ ...generalSettings, readerSettings: { ...generalSettings.readerSettings, autoActivateRules: rules } });
+		}, 500));
+	}
+
 	window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
 		rebuildGrids(lightGrid, darkGrid);
 		updatePreview();

@@ -5,6 +5,7 @@ import { TextHighlightData } from './utils/highlighter';
 import { debounce } from './utils/debounce';
 import { Settings } from './types/types';
 import { debugLog } from './utils/debug';
+import { loadSettings, generalSettings } from './utils/storage-utils';
 
 const YOUTUBE_EMBED_RULE_ID = 9001;
 const YOUTUBE_INNERTUBE_RULE_ID = 9002;
@@ -111,9 +112,52 @@ if (typeof browser !== 'undefined' && browser.webRequest?.onBeforeSendHeaders) {
 let sidePanelOpenWindows: Set<number> = new Set();
 let highlighterModeState: { [tabId: number]: boolean } = {};
 let readerModeState: { [tabId: number]: boolean } = {};
+let autoReaderTriggered: { [tabId: number]: string } = {};
 let hasHighlights = false;
 let isContextMenuCreating = false;
 let popupPorts: { [tabId: number]: browser.Runtime.Port } = {};
+
+// Convert a user-facing glob ("*://elpais.com/opinion/*") into a RegExp.
+// Wildcards: * matches any sequence, ? matches a single character.
+// Everything else is escaped as a literal.
+function globToRegExp(glob: string): RegExp {
+	const escaped = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+		.replace(/\*/g, '.*')
+		.replace(/\?/g, '.');
+	return new RegExp('^' + escaped + '$');
+}
+
+function urlMatchesAnyRule(url: string, rules: string[]): boolean {
+	for (const rule of rules) {
+		const trimmed = rule.trim();
+		if (!trimmed || trimmed.startsWith('#')) continue;
+		try {
+			if (globToRegExp(trimmed).test(url)) return true;
+		} catch {
+			// Bad pattern — skip silently.
+		}
+	}
+	return false;
+}
+
+async function maybeAutoActivateReader(tabId: number, url: string) {
+	if (!url || !isValidUrl(url) || isBlankPage(url)) return;
+	const rules = generalSettings.readerSettings?.autoActivateRules ?? [];
+	if (rules.length === 0) return;
+	if (!urlMatchesAnyRule(url, rules)) return;
+	// Don't re-trigger on reload or back/forward for the same URL.
+	if (autoReaderTriggered[tabId] === url) return;
+	if (readerModeState[tabId]) return;
+
+	autoReaderTriggered[tabId] = url;
+	try {
+		await ensureContentScriptLoadedInBackground(tabId);
+		await injectReaderScript(tabId);
+		await browser.tabs.sendMessage(tabId, { action: "toggleReaderMode" });
+	} catch (error) {
+		console.error('Auto-activate Reader failed:', error);
+	}
+}
 
 async function injectContentScript(tabId: number): Promise<void> {
 	if (browser.scripting) {
@@ -232,12 +276,24 @@ async function exitReaderPageIfNeeded(tabId: number, readerUrl?: string): Promis
 
 async function initialize() {
 	try {
+		// Load persisted settings so auto-activate rules are available early.
+		await loadSettings();
+
 		// Set up tab listeners
 		await setupTabListeners();
 
 		browser.tabs.onRemoved.addListener((tabId) => {
 			delete highlighterModeState[tabId];
 			delete readerModeState[tabId];
+			delete autoReaderTriggered[tabId];
+		});
+
+		// Re-load settings when they change so rule edits take effect without
+		// reloading the extension.
+		browser.storage.onChanged.addListener((changes, area) => {
+			if (area === 'sync' && changes.reader_settings) {
+				loadSettings().catch(err => console.error('Reload settings failed:', err));
+			}
 		});
 		
 		// Initialize context menu
@@ -898,6 +954,27 @@ async function setupTabListeners() {
 			}
 		});
 	}
+
+	// Auto-activate Reader on URLs matching user rules — all browsers.
+	// Reset the per-tab "already triggered" guard when the URL changes,
+	// then trigger when the page finishes loading. tab.url can be undefined
+	// on Firefox without host permission for the tab; fall back to tabs.get().
+	browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+		if (changeInfo.url && autoReaderTriggered[tabId] !== changeInfo.url) {
+			delete autoReaderTriggered[tabId];
+		}
+		if (changeInfo.status !== 'complete') return;
+		let url = tab.url;
+		if (!url) {
+			try {
+				const fresh = await browser.tabs.get(tabId);
+				url = fresh.url;
+			} catch {
+				return;
+			}
+		}
+		if (url) maybeAutoActivateReader(tabId, url);
+	});
 }
 
 const debouncedPaintHighlights = debounce(async (tabId: number) => {

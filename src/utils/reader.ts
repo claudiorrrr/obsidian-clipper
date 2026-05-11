@@ -159,7 +159,8 @@ export class Reader {
 		pinPlayer: true,
 		autoScroll: true,
 		highlightActiveLine: true,
-		customCss: ''
+		customCss: '',
+		autoActivateRules: []
 	};
 
 	private static async loadSettings(): Promise<void> {

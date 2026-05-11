@@ -39,6 +39,7 @@ export const generalSettings: Settings = {
 		autoScroll: true,
 		highlightActiveLine: true,
 		customCss: '',
+		autoActivateRules: [],
 	},
 	stats: {
 		addToObsidian: 0,

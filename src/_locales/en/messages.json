@@ -747,6 +747,12 @@
 	"readerCustomCssDescription": {
 		"message": "CSS applied automatically in reading view."
 	},
+	"readerAutoActivateRules": {
+		"message": "Auto-activate on URLs"
+	},
+	"readerAutoActivateRulesDescription": {
+		"message": "One URL glob per line. Reader activates when a page URL matches any rule. Use * as a wildcard. Example: *://elpais.com/opinion/*"
+	},
 	"readerDarkTheme": {
 		"message": "Dark mode theme"
 	},
