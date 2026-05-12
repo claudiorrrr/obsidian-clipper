@@ -115,8 +115,21 @@ interface StorageData {
 const CURRENT_MIGRATION_VERSION = 1;
 
 export async function loadSettings(): Promise<Settings> {
-	const data = await browser.storage.sync.get(null) as StorageData;
-	
+	let data = await browser.storage.sync.get(null) as StorageData;
+
+	// If sync storage looks empty, try local backup before falling back to defaults
+	const hasSyncData = data.vaults || data.general_settings || data.highlighter_settings || data.interpreter_settings || data.reader_settings;
+	if (!hasSyncData) {
+		debugLog('Settings', 'Sync storage is empty, checking local backup');
+		const backup = await browser.storage.local.get('settings_backup');
+		if (backup.settings_backup) {
+			debugLog('Settings', 'Restoring settings from local backup');
+			data = backup.settings_backup as StorageData;
+			// Re-populate sync storage from the backup
+			await browser.storage.sync.set(data as Record<string, unknown>);
+		}
+	}
+
 	// Load default settings first
 	const defaultSettings: Settings = {
 		vaults: [],
@@ -235,7 +248,7 @@ export async function saveSettings(settings?: Partial<Settings>): Promise<void> 
 		generalSettings = { ...generalSettings, ...settings };
 	}
 
-	await browser.storage.sync.set({
+	const syncData = {
 		vaults: generalSettings.vaults,
 		general_settings: {
 			showMoreActionsButton: generalSettings.showMoreActionsButton,
@@ -278,7 +291,12 @@ export async function saveSettings(settings?: Partial<Settings>): Promise<void> 
 			autoActivateRules: generalSettings.readerSettings.autoActivateRules
 		},
 		stats: generalSettings.stats
-	});
+	};
+
+	await browser.storage.sync.set(syncData);
+
+	// Mirror to local storage as backup in case sync fails
+	await browser.storage.local.set({ settings_backup: syncData });
 }
 
 export async function setLegacyMode(enabled: boolean): Promise<void> {

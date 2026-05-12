@@ -19,11 +19,24 @@ export function setEditingTemplateIndex(index: number): void {
 
 export async function loadTemplates(): Promise<Template[]> {
 	try {
-		const data = await browser.storage.sync.get(['template_list']);
+		let data = await browser.storage.sync.get(['template_list']);
 		let templateIds = data.template_list as string[] || [];
 
 		// Filter out any null or undefined values
 		templateIds = templateIds.filter(id => id != null);
+
+		// If sync storage has no templates, try restoring from local backup
+		if (templateIds.length === 0) {
+			console.log('No templates in sync storage, checking local backup');
+			const backup = await browser.storage.local.get('templates_backup');
+			if (backup.templates_backup) {
+				console.log('Restoring templates from local backup');
+				const backupData = backup.templates_backup as Record<string, unknown>;
+				// Re-populate sync storage from the backup
+				await browser.storage.sync.set(backupData);
+				templateIds = (backupData[TEMPLATE_LIST_KEY] as string[] || []).filter(id => id != null);
+			}
+		}
 
 		if (templateIds.length > 0) {
 			const loadedTemplates = await Promise.all(templateIds.map(async (id: string) => {
@@ -87,7 +100,12 @@ export async function saveTemplateSettings(): Promise<string[]> {
 	}
 
 	try {
-		await browser.storage.sync.set({ ...templateChunks, [TEMPLATE_LIST_KEY]: templateIds });
+		const syncData = { ...templateChunks, [TEMPLATE_LIST_KEY]: templateIds };
+		await browser.storage.sync.set(syncData);
+
+		// Mirror to local storage as backup in case sync fails
+		await browser.storage.local.set({ templates_backup: syncData });
+
 		console.log('Template settings saved');
 		return warnings;
 	} catch (error) {
